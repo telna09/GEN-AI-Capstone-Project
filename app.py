@@ -381,6 +381,10 @@ def initialize_session_state():
         st.session_state.chat_history = []
     if 'diagnosis_submitted' not in st.session_state:
         st.session_state.diagnosis_submitted = False
+    if 'vitals_displayed' not in st.session_state:
+        st.session_state.vitals_displayed = False
+    if 'exam_results' not in st.session_state:
+        st.session_state.exam_results = []
 
 def main():
     st.set_page_config(
@@ -389,7 +393,7 @@ def main():
         layout="wide"
     )
 
-    # Custom CSS
+    # Custom CSS - Fixed for better visibility
     st.markdown("""
         <style>
         .main-header {
@@ -401,30 +405,60 @@ def main():
             margin-bottom: 2rem;
         }
         .patient-card {
-            background-color: #f0f8ff;
+            background-color: #e3f2fd;
             padding: 1.5rem;
             border-radius: 10px;
             border-left: 5px solid #1e88e5;
             margin-bottom: 1rem;
+            color: #000000;
         }
-        .chat-message {
+        .patient-card h3 {
+            color: #1565c0;
+            margin-bottom: 1rem;
+        }
+        .patient-card p {
+            color: #000000;
+            margin: 0.5rem 0;
+        }
+        .student-msg {
+            background-color: #e3f2fd;
             padding: 1rem;
             border-radius: 10px;
-            margin-bottom: 0.5rem;
-        }
-        .student-message {
-            background-color: #e3f2fd;
             border-left: 4px solid #1e88e5;
+            margin-bottom: 1rem;
+            color: #000000;
         }
-        .patient-message {
+        .patient-msg {
             background-color: #fff3e0;
+            padding: 1rem;
+            border-radius: 10px;
             border-left: 4px solid #ff9800;
+            margin-bottom: 1rem;
+            color: #000000;
         }
-        .vitals-box {
+        .vitals-container {
             background-color: #e8f5e9;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border-left: 4px solid #4caf50;
+            margin: 1rem 0;
+        }
+        .vitals-container h4 {
+            color: #2e7d32;
+            margin-bottom: 1rem;
+        }
+        .vitals-container p {
+            color: #000000;
+            margin: 0.5rem 0;
+            font-size: 1.1rem;
+        }
+        .exam-result {
+            background-color: #f3e5f5;
             padding: 1rem;
             border-radius: 8px;
-            border-left: 4px solid #4caf50;
+            border-left: 4px solid #9c27b0;
+            margin: 1rem 0;
+            color: #000000;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -470,6 +504,8 @@ def main():
                 st.session_state.patient_loaded = False
                 st.session_state.chat_history = []
                 st.session_state.diagnosis_submitted = False
+                st.session_state.vitals_displayed = False
+                st.session_state.exam_results = []
                 st.rerun()
 
     # Main content area
@@ -525,36 +561,50 @@ def main():
         with tab1:
             st.subheader("Patient Interview")
             
-            # Display chat history
-            for msg in st.session_state.chat_history:
-                if msg['type'] == 'student':
-                    st.markdown(f'<div class="chat-message student-message"><strong>👨‍⚕️ You:</strong> {msg["text"]}</div>', 
-                              unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="chat-message patient-message"><strong>🗣️ Patient:</strong> {msg["text"]}</div>', 
-                              unsafe_allow_html=True)
+            # Display chat history with proper styling
+            chat_container = st.container()
+            with chat_container:
+                for msg in st.session_state.chat_history:
+                    if msg['type'] == 'student':
+                        st.markdown(f"""
+                        <div class="student-msg">
+                            <strong>👨‍⚕️ You:</strong> {msg["text"]}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class="patient-msg">
+                            <strong>🗣️ Patient:</strong> {msg["text"]}
+                        </div>
+                        """, unsafe_allow_html=True)
 
             # Question input
-            question = st.text_input("Ask the patient a question:", key="question_input")
+            st.write("")
+            question = st.text_input("Ask the patient a question:", key="question_input", placeholder="e.g., When did your symptoms start?")
+            
             col1, col2 = st.columns([1, 4])
             with col1:
-                if st.button("💡 Get Hint"):
+                if st.button("💡 Get Hint", use_container_width=True):
                     hint = manager.get_hint()
-                    st.info(hint)
+                    st.info(f"💭 {hint}")
             with col2:
-                if st.button("📤 Ask Question", disabled=not question):
-                    if question:
-                        with st.spinner("🤔 Patient is thinking..."):
-                            response = manager.ask_question(question)
-                            st.session_state.chat_history.append({
-                                'type': 'student',
-                                'text': question
-                            })
-                            st.session_state.chat_history.append({
-                                'type': 'patient',
-                                'text': response['response_text']
-                            })
+                ask_btn = st.button("📤 Ask Question", use_container_width=True, type="primary", disabled=not question)
+                
+            if ask_btn and question:
+                with st.spinner("🤔 Patient is thinking..."):
+                    try:
+                        response = manager.ask_question(question)
+                        st.session_state.chat_history.append({
+                            'type': 'student',
+                            'text': question
+                        })
+                        st.session_state.chat_history.append({
+                            'type': 'patient',
+                            'text': response['response_text']
+                        })
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
         with tab2:
             st.subheader("Vital Signs & Physical Examination")
@@ -562,11 +612,16 @@ def main():
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("📊 Check Vital Signs"):
+                if st.button("📊 Check Vital Signs", use_container_width=True):
                     vitals = manager.get_vital_signs()
+                    st.session_state.vitals_displayed = True
+                    st.session_state.current_vitals = vitals
+                
+                if st.session_state.vitals_displayed and 'current_vitals' in st.session_state:
+                    vitals = st.session_state.current_vitals
                     st.markdown(f"""
-                    <div class="vitals-box">
-                        <h4>Vital Signs</h4>
+                    <div class="vitals-container">
+                        <h4>📊 Vital Signs</h4>
                         <p>🌡️ <strong>Temperature:</strong> {vitals['temperature']}</p>
                         <p>💓 <strong>Blood Pressure:</strong> {vitals['blood_pressure']}</p>
                         <p>❤️ <strong>Heart Rate:</strong> {vitals['heart_rate']}</p>
@@ -580,9 +635,23 @@ def main():
                     "Select examination area:",
                     ["General", "Cardiovascular", "Respiratory", "Abdominal", "Neurological"]
                 )
-                if st.button("🔍 Perform Examination"):
+                if st.button("🔍 Perform Examination", use_container_width=True):
                     findings = manager.perform_physical_exam(exam_area)
-                    st.info(f"**Physical Examination Findings:**\n\n{findings}")
+                    st.session_state.exam_results.append({
+                        'area': exam_area,
+                        'findings': findings
+                    })
+            
+            # Display exam results
+            if st.session_state.exam_results:
+                st.write("---")
+                for exam in st.session_state.exam_results:
+                    st.markdown(f"""
+                    <div class="exam-result">
+                        <strong>🔍 {exam['area']} Examination:</strong><br>
+                        {exam['findings']}
+                    </div>
+                    """, unsafe_allow_html=True)
 
         with tab3:
             st.subheader("Submit Your Diagnosis")
@@ -595,13 +664,16 @@ def main():
                     height=150
                 )
                 
-                if st.button("✅ Submit Diagnosis", disabled=not (diagnosis and reasoning)):
+                if st.button("✅ Submit Diagnosis", disabled=not (diagnosis and reasoning), use_container_width=True, type="primary"):
                     if diagnosis and reasoning:
                         with st.spinner("⏳ Evaluating your diagnosis..."):
-                            result = manager.submit_diagnosis(diagnosis, reasoning)
-                            st.session_state.diagnosis_result = result
-                            st.session_state.diagnosis_submitted = True
-                        st.rerun()
+                            try:
+                                result = manager.submit_diagnosis(diagnosis, reasoning)
+                                st.session_state.diagnosis_result = result
+                                st.session_state.diagnosis_submitted = True
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error: {str(e)}")
             else:
                 # Display evaluation results
                 result = st.session_state.diagnosis_result
@@ -615,9 +687,9 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.info(f"**🎯 Correct Diagnosis:**\n{result['correct_diagnosis']}")
+                    st.info(f"**🎯 Correct Diagnosis:**\n\n{result['correct_diagnosis']}")
                 with col2:
-                    st.warning(f"**📋 Your Diagnosis:**\n{result['student_diagnosis']}")
+                    st.warning(f"**📋 Your Diagnosis:**\n\n{result['student_diagnosis']}")
                 
                 st.markdown("**📊 Differential Diagnoses:**")
                 for diff in result['differential_diagnoses']:
@@ -646,7 +718,10 @@ def main():
         with tab4:
             st.subheader("Session Summary")
             
-            stats = result['session_stats'] if st.session_state.diagnosis_submitted else None
+            if st.session_state.diagnosis_submitted:
+                stats = st.session_state.diagnosis_result['session_stats']
+            else:
+                stats = None
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -662,9 +737,22 @@ def main():
                     st.metric("⏱️ Duration", f"{duration:.1f} min")
             
             if stats and stats['revealed_info']:
+                st.write("---")
                 st.markdown("**📝 Information Gathered:**")
                 for info in stats['revealed_info']:
                     st.write(f"• {info}")
+            
+            # Display conversation summary
+            if st.session_state.chat_history:
+                st.write("---")
+                st.markdown("**💬 Conversation History:**")
+                with st.expander("View full conversation"):
+                    for i, msg in enumerate(st.session_state.chat_history, 1):
+                        if msg['type'] == 'student':
+                            st.markdown(f"**Q{i//2 + 1}:** {msg['text']}")
+                        else:
+                            st.markdown(f"*{msg['text']}*")
+                            st.write("")
 
 if __name__ == "__main__":
     main()
